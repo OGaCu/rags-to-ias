@@ -51,7 +51,6 @@ def base64_to_image(base64_str):
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
-        # If there's an image associated with this message, display it
         if show_images and message.get("image"):
             img = base64_to_image(message["image"])
             if img:
@@ -65,9 +64,9 @@ def generate_model_response(query, docs, model_choice):
         return generate_rag_response(query, docs, model)
 
 # Function to process RAG images
-def process_images(query_and_response):
+def process_images(query):
     if show_images:
-        return rag_images(query_and_response)
+        return rag_images(query)
     else: return
 
 # Accept user input
@@ -109,11 +108,11 @@ if user_query := st.chat_input("Ask something about the course..."):
                 
                 # Start image processing with both query and response
                 if show_images:
-                    images, top_img_score = process_images(user_query + " " + response)
+                    images, top_img_score = process_images(user_query)
                     if top_img_score > 10:
                         # top_img = get_top_image(images)
                         top_img = images[0]
-                        st.image(top_img)
+                        # st.image(top_img)
                         message_data["image"] = image_to_base64(top_img)
                         
             # Save the message to session state
