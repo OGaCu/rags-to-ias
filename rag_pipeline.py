@@ -26,12 +26,15 @@ model = genai.GenerativeModel('gemini-2.0-flash-001')
 
 def chunk_and_retrieve():
     RAW_KNOWLEDGE_BASE = []
-    # data_paths = ["487w25-syllabus.pdf"]
-    data_paths = ["487w25-syllabus.pdf", "14-llm.pdf", "13-transformer (1).pdf", "1-introduction.pdf"]
-
+    root_path = "eecs-487-docs"
+    data_paths = ["487w25-syllabus.pdf", "14-llm.pdf", "13-transformer (1).pdf", "1-introduction.pdf"]    
+    full_data_paths = [f"{root_path}/{path}" for path in data_paths]
+    data_paths = full_data_paths
+    
     for data_path in data_paths:
         RAW_KNOWLEDGE_BASE.append(LangchainDocument(extract_text(data_path)))
 
+    # added natural questions to knowledge base
     # jsonl_docs = read_jsonl("NQ-open.train.jsonl")
     # RAW_KNOWLEDGE_BASE.extend(jsonl_docs)
 
@@ -244,7 +247,8 @@ def mistral_generate_rag_response(query, retrieved_docs, mistral_model):
                 "role":"user",
                 "content": prompt
             },
-        ]
+        ],
+        max_tokens=250 # set to prevent against exploit
     )
 
     return response.choices[0].message.content
