@@ -3,8 +3,6 @@
 An interactive chatbot built for answering questions about the EECS 487 Natural Language Processing course. 
 This system combines retrieval-augmented generation (RAG) using course materials (PDFs) with large language models (Gemini or Mistral) and a simple Streamlit interface.
 
----
-
 ## 🔍 Features
 
 - 💬 Ask questions about the course syllabus and lecture notes
@@ -16,8 +14,10 @@ This system combines retrieval-augmented generation (RAG) using course materials
 ## 📁 Project Structure
 ```
 ├── ask_ia.sh            # Script to launch the chatbot
-├── mistral_ui_opt.py    # Streamlit UI logic
+├── mistral_ui.py        # Streamlit UI logic with both models
+├── ui.py                # Streamlit UI logic with Gemini
 ├── rag_pipeline.py      # Backend RAG logic and model handling
+├── finetune.ipynb       # Notebook to finetune embeddings
 ├── eecs-487-docs/       # Folder for PDF course materials (input)
 ├── images/              # Images for similarity maps
 └── data/                # Folder for image conversion (optional)
