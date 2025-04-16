@@ -97,10 +97,6 @@ def retrieve_info(user_query, embedding_model, KNOWLEDGE_VECTOR_DATABASE, docs_p
     retrieved_docs = KNOWLEDGE_VECTOR_DATABASE.similarity_search(query=user_query, k=7)
     return retrieved_docs
 
-    # You are an assistant that answers questions based on the provided information. 
-    # Use only the following context to answer the question. 
-    # If you don't know the answer based on the context, say "I don't have enough information to answer this question."
-    # If the answer to the question is not in context, then output "NOT IN CONTEXT" as the very last sentence.
 def generate_rag_response(query, retrieved_docs, model):
     context = "\n\n".join([doc.page_content for doc in retrieved_docs])
 
@@ -124,9 +120,6 @@ def generate_rag_response(query, retrieved_docs, model):
     }
     
     response = model.generate_content(prompt, generation_config=config)
-    # if "NOT IN CONTEXT" in response.text:
-    #     prompt_without_context = f"""say "the following isn't from context", then you are an Instructional Assistant in college, response to the QUESTION {query} ANSWER:"""
-    #     response = model.generate_content(prompt_without_context)
 
     return response.text
 

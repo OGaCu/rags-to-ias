@@ -1,14 +1,13 @@
 import streamlit as st
+import base64
+from io import BytesIO
 import asyncio
-import nest_asyncio
-from concurrent.futures import ThreadPoolExecutor
+import concurrent.futures
 from rag_pipeline import chunk_and_retrieve, retrieve_info, generate_rag_response, model
-from rag_pipeline import get_top_image, rag_images, generate_caption
+from rag_pipeline import convert_from_path, get_top_image, rag_images, generate_caption
 from rag_pipeline import mistral_generate_rag_response, mistral_model
 
-# Apply nest_asyncio to allow asyncio to work within Streamlit
-nest_asyncio.apply()
-
+# Run once to build vector DB and embeddings
 @st.cache_resource(show_spinner="Loading knowledge base...")
 def load_knowledge():
     return chunk_and_retrieve()
@@ -18,121 +17,104 @@ embedding_model, KNOWLEDGE_VECTOR_DATABASE, docs_processed = load_knowledge()
 # App title
 st.title("EECS 487 Chatbot")
 
+# Add model selection in the sidebar
+st.sidebar.title("Model Settings")
+selected_model = st.sidebar.radio(
+    "Choose a model",
+    ["Gemini", "Mistral"],
+    help="Select which model to use for generating responses"
+)
+
+show_images = st.sidebar.checkbox("Show related images", value=True)
+
 # Session state initialization
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Main content area
-main_content = st.container()
+# Helper function to convert PIL image to base64 (for storing in session state)
+def image_to_base64(img):
+    buffered = BytesIO()
+    img.save(buffered, format="PNG")
+    return base64.b64encode(buffered.getvalue()).decode()
 
-# Create a separate container for chat messages that will appear above the input
-with main_content:
-    # Display previous messages
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-            if "image" in message:
-                st.image(message["image"])
-
-# Function definitions
-async def async_retrieve_info(query, embedding_model, db, docs):
-    loop = asyncio.get_event_loop()
-    with ThreadPoolExecutor() as pool:
-        return await loop.run_in_executor(
-            pool, retrieve_info, query, embedding_model, db, docs
-        )
-
-async def async_generate_response(query, docs, model_choice):
-    loop = asyncio.get_event_loop()
-    with ThreadPoolExecutor() as pool:
-        # Choose the appropriate generate function and model based on user selection
-        if model_choice == "Gemini":
-            return await loop.run_in_executor(
-                pool, generate_rag_response, query, docs, model
-            )
-        else:  # Mistral
-            return await loop.run_in_executor(
-                pool, mistral_generate_rag_response, query, docs, mistral_model
-            )
-
-async def async_rag_images(query):
-    loop = asyncio.get_event_loop()
-    with ThreadPoolExecutor() as pool:
-        return await loop.run_in_executor(
-            pool, rag_images, query
-        )
-
-# Create a fixed container at the bottom for the input
-input_area = st.container()
-
-# Add a divider to separate messages from input area
-st.divider()
-
-# Input area at the bottom
-with input_area:
-    col1, col2 = st.columns([4, 1])
+# Helper function to convert base64 back to PIL image (for displaying from session state)
+def base64_to_image(base64_str):
+    from PIL import Image
+    import io
     
-    # Add the model selection dropdown in the second column
-    with col2:
-        model_choice = st.selectbox(
-            "Model:",
-            ("Gemini", "Mistral"),
-            index=0,  # Default to Gemini
-        )
+    if base64_str:
+        img_data = base64.b64decode(base64_str)
+        return Image.open(io.BytesIO(img_data))
+    return None
 
-    # Add the chat input in the first column
-    with col1:
-        user_query = st.chat_input("Ask something about the course...")
+# Display previous messages
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+        # If there's an image associated with this message, display it
+        if show_images and message.get("image"):
+            img = base64_to_image(message["image"])
+            if img:
+                st.image(img)
 
-# Process user input
-if user_query:
+# Function to generate response based on selected model
+def generate_model_response(query, docs, model_choice):
+    if model_choice == "Mistral":
+        return mistral_generate_rag_response(query, docs, mistral_model)
+    else:  # Default to Gemini
+        return generate_rag_response(query, docs, model)
+
+# Function to process RAG images
+def process_images(query_and_response):
+    if show_images:
+        return rag_images(query_and_response)
+    else: return
+
+# Accept user input
+if user_query := st.chat_input("Ask something about the course..."):
     # Show user message
     st.chat_message("user").markdown(user_query)
     st.session_state.messages.append({"role": "user", "content": user_query})
     
     # Retrieve relevant docs and generate response
     with st.chat_message("assistant"):
-        # Create containers for text response and image
-        text_container = st.container()
-        image_container = st.container()
-        
-        # Define the main async function
-        async def process_query():
-            # Start both tasks concurrently
-            docs_task = async_retrieve_info(
-                user_query, embedding_model, KNOWLEDGE_VECTOR_DATABASE, docs_processed
-            )
-            images_task = async_rag_images(user_query)
+        with st.spinner("Thinking..."):
+            # Retrieve relevant documents
+            retrieved_docs = retrieve_info(user_query, embedding_model, KNOWLEDGE_VECTOR_DATABASE, docs_processed)
             
-            # Await both tasks concurrently
-            retrieved_docs, images = await asyncio.gather(docs_task, images_task)
-            images, top_image_score = images
-            
-            # Generate response using the selected model
-            response = await async_generate_response(user_query, retrieved_docs, model_choice)
-            
-            with text_container:
+            # Run model and image processing concurrently
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                # Always start image processing regardless of toggle state
+                # We'll pass just the query first, and update with response later
+                future_images = executor.submit(process_images, user_query)
+                # Start response generation
+                future_response = executor.submit(
+                    generate_model_response, 
+                    user_query, 
+                    retrieved_docs, 
+                    selected_model
+                )
+                
+                # Get response
+                response = future_response.result()
                 st.markdown(response)
-            
-            show_image = None
-            if images and len(images) > 0 and top_image_score > 12:
-                top_img = get_top_image(images)
-                with image_container:
-                    st.image(top_img)
-                    show_image = True
-            else: 
-                show_image = False
-            
-            # Update session state
-            if show_image:
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": response, 
-                    "image": top_img 
-                })
-            else:
-                st.session_state.messages.append({"role": "assistant", "content": response})
-            
-        # Run the async function
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(process_query())
+                
+                # Message data to save
+                message_data = {"role": "assistant", "content": response}
+                
+                # Process images
+                # Cancel the first image processing if it's still running
+                if not future_images.done():
+                    future_images.cancel()
+                
+                # Start image processing with both query and response
+                if show_images:
+                    images, top_img_score = process_images(user_query + " " + response)
+                    if top_img_score > 10:
+                        # top_img = get_top_image(images)
+                        top_img = images[0]
+                        st.image(top_img)
+                        message_data["image"] = image_to_base64(top_img)
+                        
+            # Save the message to session state
+            st.session_state.messages.append(message_data)
