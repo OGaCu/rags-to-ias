@@ -27,7 +27,7 @@ model = genai.GenerativeModel('gemini-2.0-flash-001')
 def chunk_and_retrieve():
     RAW_KNOWLEDGE_BASE = []
     root_path = "eecs-487-docs"
-    data_paths = ["487w25-syllabus.pdf", "14-llm.pdf", "13-transformer (1).pdf", "1-introduction.pdf"]    
+    data_paths = ["487w25-syllabus.pdf", "14-llm.pdf", "13-transformer (1).pdf", "1-introduction.pdf", "2-textnormalization.pdf", "3-languagemodel (1).pdf", "4-textcategorization-nb (1).pdf", "5-mlbasics (2).pdf", "6-parsing_part1 (1).pdf","7-parsing_part2 (1).pdf", "8-semantics (1).pdf", "9-neurallm (1).pdf", "10-svd (1).pdf",  "11-rnn-languagemodel (1).pdf", "12-rnn-lstm (1).pdf", "15-summarization.pdf"]    
     full_data_paths = [f"{root_path}/{path}" for path in data_paths]
     data_paths = full_data_paths
     
